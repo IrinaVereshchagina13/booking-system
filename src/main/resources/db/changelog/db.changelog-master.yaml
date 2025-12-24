@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/changeset/01-init-schema.sql
   - include:
       file: db/changelog/changeset/02-insert-test-data.sql
+  - include:
+      file: db/changelog/changeset/03-fix-unique-constraint.sql
