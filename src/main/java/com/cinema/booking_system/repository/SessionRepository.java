@@ -13,4 +13,6 @@ public interface SessionRepository extends JpaRepository<Session, Long> {
 
     @Query("SELECT s FROM Session s WHERE s.startTime BETWEEN :start AND :end")
     List<Session> findSessionsByDate(LocalDateTime start, LocalDateTime end);
+
+    List<Session> findAllByStartTimeBetween(LocalDateTime start, LocalDateTime end);
 }
