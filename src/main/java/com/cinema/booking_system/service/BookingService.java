@@ -9,8 +9,11 @@ import com.cinema.booking_system.exception.SeatAlreadyBookedException;
 import com.cinema.booking_system.mapper.TicketMapper;
 import com.cinema.booking_system.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Duration;
 
 @Service
 @RequiredArgsConstructor
@@ -20,30 +23,32 @@ public class BookingService {
     private final SessionRepository sessionRepository;
     private final SeatRepository seatRepository;
     private final TicketMapper ticketMapper;
+    private final StringRedisTemplate redisTemplate;
+
+    private static final String LOCK_KEY_TEMPLATE = "ticket:session:%d:seat:%d";
 
     @Transactional
     public TicketDto bookTicket(TicketBookingRequest request) {
-        Session session = sessionRepository.findById(request.getSessionId())
-                .orElseThrow(() -> new ResourceNotFoundException("Session not found with id: " + request.getSessionId()));
+        Session session = findSession(request.getSessionId());
+        Long seatId = findSeatIdForRedis(session, request);
 
-        Seat seat = seatRepository.findByHallIdAndRowNumberAndSeatNumber(
-                session.getHall().getId(),
-                request.getRowNumber(),
-                request.getSeatNumber()
-        ).orElseThrow(() -> new ResourceNotFoundException("Seat not found at row " + request.getRowNumber() + " seat " + request.getSeatNumber()));
+        String redisKey = buildRedisKey(session.getId(), seatId);
 
-        validateSeatAvailable(session.getId(), seat.getId());
+        acquireRedisLock(redisKey, request.getUserId());
 
-        Ticket ticket = Ticket.builder()
-                .userId(request.getUserId())
-                .session(session)
-                .seat(seat)
-                .status(TicketStatus.BOOKED)
-                .build();
+        try {
+            Seat seat = findAndLockSeat(session, request);
 
-        Ticket savedTicket = ticketRepository.save(ticket);
+            validateSeatAvailable(session.getId(), seat.getId());
 
-        return ticketMapper.toDto(savedTicket);
+            Ticket ticket = saveTicket(session, seat, request.getUserId());
+
+            return ticketMapper.toDto(ticket);
+
+        } catch (Exception e) {
+            redisTemplate.delete(redisKey);
+            throw e;
+        }
     }
 
     @Transactional
@@ -58,6 +63,9 @@ public class BookingService {
         ticket.setStatus(TicketStatus.CANCELED);
         ticketRepository.save(ticket);
 
+        String redisKey = String.format(LOCK_KEY_TEMPLATE, ticket.getSession().getId(), ticket.getSeat().getId());
+        redisTemplate.delete(redisKey);
+
         System.out.println("Ticket " + ticketId + " canceled. Reason: " + request.getReason());
     }
 
@@ -71,5 +79,51 @@ public class BookingService {
         if (isTaken) {
             throw new SeatAlreadyBookedException("Seat is already booked");
         }
+    }
+
+    private Session findSession(Long sessionId) {
+        return sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
+    }
+
+    private Long findSeatIdForRedis(Session session, TicketBookingRequest request) {
+        return seatRepository.findByHallIdAndRowNumberAndSeatNumber(
+                session.getHall().getId(),
+                request.getRowNumber(),
+                request.getSeatNumber()
+        ).map(Seat::getId).orElseThrow(() -> new ResourceNotFoundException("Seat not found"));
+    }
+
+    private String buildRedisKey(Long sessionId, Long seatId) {
+        return String.format(LOCK_KEY_TEMPLATE, sessionId, seatId);
+    }
+
+    private void acquireRedisLock(String key, Long userId) {
+        Boolean success = redisTemplate.opsForValue().setIfAbsent(
+                key,
+                String.valueOf(userId),
+                Duration.ofMinutes(5)
+        );
+        if (Boolean.FALSE.equals(success)) {
+            throw new SeatAlreadyBookedException("Seat is temporarily reserved by another user");
+        }
+    }
+
+    private Seat findAndLockSeat(Session session, TicketBookingRequest request) {
+        return seatRepository.findForBooking(
+                session.getHall().getId(),
+                request.getRowNumber(),
+                request.getSeatNumber()
+        ).orElseThrow(() -> new ResourceNotFoundException("Seat not found"));
+    }
+
+    private Ticket saveTicket(Session session, Seat seat, Long userId) {
+        Ticket ticket = Ticket.builder()
+                .userId(userId)
+                .session(session)
+                .seat(seat)
+                .status(TicketStatus.BOOKED)
+                .build();
+        return ticketRepository.save(ticket);
     }
 }
