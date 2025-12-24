@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -16,4 +17,6 @@ public interface SeatRepository extends JpaRepository<Seat, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM Seat s WHERE s.hall.id = :hallId AND s.rowNumber = :rowNumber AND s.seatNumber = :seatNumber")
     Optional<Seat> findForBooking(Long hallId, Integer rowNumber, Integer seatNumber);
+
+    List<Seat> findAllByHallId(Long hallId);
 }
