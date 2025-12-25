@@ -53,8 +53,12 @@ public class BookingService {
 
     @Transactional
     public void cancelTicket(Long ticketId, TicketCancelRequest request) {
-        Ticket ticket = ticketRepository.findById(ticketId)
+        Ticket ticket = ticketRepository.findByIdWithLock(ticketId)
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket not found with id: " + ticketId));
+
+        if (ticket.getStatus() == TicketStatus.PAID) {
+            throw new IllegalStateException("Cannot cancel paid ticket");
+        }
 
         if (ticket.getStatus() == TicketStatus.CANCELED) {
             return;
@@ -71,7 +75,7 @@ public class BookingService {
 
     @Transactional
     public TicketDto payTicket(Long ticketId){
-        Ticket ticket = ticketRepository.findById(ticketId)
+        Ticket ticket = ticketRepository.findByIdWithLock(ticketId)
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket not found"));
 
         if (ticket.getStatus() == TicketStatus.CANCELED){
