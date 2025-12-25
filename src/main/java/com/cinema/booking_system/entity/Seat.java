@@ -1,6 +1,8 @@
 package com.cinema.booking_system.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -8,6 +10,8 @@ import lombok.NoArgsConstructor;
 @Table(name = "seats")
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Seat {
 
     @Id
