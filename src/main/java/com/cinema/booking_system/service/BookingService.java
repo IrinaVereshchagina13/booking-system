@@ -69,6 +69,25 @@ public class BookingService {
         System.out.println("Ticket " + ticketId + " canceled. Reason: " + request.getReason());
     }
 
+    @Transactional
+    public TicketDto payTicket(Long ticketId){
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket not found"));
+
+        if (ticket.getStatus() == TicketStatus.CANCELED){
+            throw new IllegalStateException("Ticket is canceled and cannot be paid");
+        }
+
+        if (ticket.getStatus() == TicketStatus.PAID){
+            throw new IllegalStateException("Ticket is already paid");
+        }
+
+        ticket.setStatus(TicketStatus.PAID);
+        Ticket savedTicket = ticketRepository.save(ticket);
+
+        return ticketMapper.toDto(savedTicket);
+    }
+
     private void validateSeatAvailable(Long sessionId, Long seatId) {
         boolean isTaken = ticketRepository.existsBySessionIdAndSeatIdAndStatusNot(
                 sessionId,

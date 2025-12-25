@@ -32,4 +32,10 @@ public class BookingController {
         bookingService.cancelTicket(ticketId, cancelRequest);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/{ticketId}/pay")
+    public ResponseEntity<TicketDto> payTicket(@PathVariable Long ticketId) {
+        TicketDto ticketDto = bookingService.payTicket(ticketId);
+        return ResponseEntity.ok(ticketDto);
+    }
 }
